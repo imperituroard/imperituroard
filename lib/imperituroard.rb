@@ -1,6 +1,11 @@
+$LOAD_PATH.unshift File.expand_path("../projects/iot", __dir__)
+$LOAD_PATH.unshift File.expand_path("../projects/wttx", __dir__)
+
 require "imperituroard/version"
 require "imperituroard/phpipamdb"
 require "imperituroard/phpipamcps"
+require "imperituroard/projects/iot/mongoconnector"
+require "imperituroard/projects/iot/hua_oceanconnect_adapter"
 
 module Imperituroard
   class Error < StandardError; end
@@ -63,4 +68,29 @@ class Pipam
   include Phpipam
 end
 
+class Iot
+  attr_accessor :mongoip, :mongoport, :iotip, :iottoken, :database, :iotplatform_ip, :iotplatform_port
 
+  def initialize(mongoip, mongoport, iotip, database, iotplatform_ip, iotplatform_port)
+    @mongoip = mongoip
+    @mongoport = mongoport
+    @iotip = iotip
+    @database = database
+    @iotplatform_ip = iotplatform_ip
+    @iotplatform_port = iotplatform_port
+  end
+
+  def test()
+    ddd = MongoIot.new(mongoip, mongoport, iotip, database)
+    ddd.ttt
+  end
+
+  def testhua()
+    ddd1 = HuaIot.new(iotplatform_ip, iotplatform_port, "", "")
+    ddd1.test
+
+  end
+
+
+
+end
