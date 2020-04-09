@@ -6,6 +6,7 @@ require 'savon'
 
 class Pcps
   attr_accessor :wsdl, :endpoint, :namespace, :clientcps
+
   def initialize(wsdl, endpoint, namespace)
     @wsdl = wsdl
     @endpoint = endpoint
@@ -22,7 +23,7 @@ class Pcps
 
   def avp_attr_list(username)
 
-    message2 = { :networkId => username }
+    message2 = {:networkId => username}
     response = clientcps.call(:get_subscriber) do
       message(message2)
     end
@@ -96,7 +97,7 @@ class Pcps
 
 
   def get_current_attributes(msisdn)
-    message2 = { :networkId => msisdn }
+    message2 = {:networkId => msisdn}
     response = clientcps.call(:get_subscriber) do
       message(message2)
     end
@@ -131,10 +132,10 @@ class Pcps
       end
     end
 
-    added_res =  add_attribute(res_list, new_msisdn)
+    added_res = add_attribute(res_list, new_msisdn)
 
     if added_res == "0"
-     ans = del_attribute(old_msisdn)
+      ans = del_attribute(old_msisdn)
       p ans
     end
 
@@ -144,7 +145,6 @@ class Pcps
       "error"
     end
   end
-
 
 
 end

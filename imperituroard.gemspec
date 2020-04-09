@@ -35,4 +35,6 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "json", "2.3.0"
   #spec.add_development_dependency "uri"
   spec.add_development_dependency "mongo", "2.11.4"
+  spec.add_development_dependency "nokogiri"
+  spec.add_development_dependency "ipaddr"
 end
