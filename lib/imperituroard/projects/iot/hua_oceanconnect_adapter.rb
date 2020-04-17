@@ -5,21 +5,22 @@ require 'json'
 require 'rubygems'
 require 'nokogiri'
 require 'rails'
+require "imperituroard/projects/iot/internal_functions"
 
 
 class HuaIot
 
-  attr_accessor :platformip, :platformport, :client, :database, :cert_file, :key_file
+  attr_accessor :platformip, :platformport, :client, :database, :cert_file, :key_file, :internal_func
 
-  def initialize(platformip, platformport, iotip, database, cert_file, key_file)
+  def initialize(platformip, platformport, cert_file, key_file)
     @database = database
     @platformip = platformip
     @platformport = platformport
-    @iotip = iotip
     @cert_file = cert_file
     @key_file = key_file
     #client_host = [mongoip + ":" + mongoport]
     #@client = Mongo::Client.new(client_host, :database => database)
+    @internal_func = InternalFunc.new
   end
 
   def parse_token(str)
@@ -49,23 +50,66 @@ class HuaIot
   end
 
   def get_token(app_id, secret)
-    path = "/iocm/app/sec/v1.1.0/login"
-    url_string = "https://" + platformip + ":" + platformport + path
-    uri = URI.parse url_string
-    https = Net::HTTP.new(uri.host, uri.port)
-    https.use_ssl = true
-    https.cert = OpenSSL::X509::Certificate.new(File.read(cert_file))
-    https.key = OpenSSL::PKey::RSA.new(File.read(key_file))
-    https.verify_mode = OpenSSL::SSL::VERIFY_NONE
-    request = Net::HTTP::Post.new(uri.path)
-    data = {
-        :appId => app_id,
-        :secret => secret
-    }
-    request.content_type = 'application/x-www-form-urlencoded'
-    request.body = URI.encode_www_form(data)
-    res = https.request(request)
-    {:code => res.code, :message => res.message, :body => JSON.parse(res.body.to_s)}
+    internal_func.printer_texter("get_token: start. Step1, iput: app_id: #{app_id.to_s}, secret: #{secret.to_s}", "debug")
+    out_resp = {}
+    begin
+      path = "/iocm/app/sec/v1.1.0/login"
+      url_string = "https://" + platformip + ":" + platformport + path
+      internal_func.printer_texter("get_token: start. Step2, url_string: #{url_string}", "debug")
+      uri = URI.parse url_string
+      https = Net::HTTP.new(uri.host, uri.port)
+      https.use_ssl = true
+      https.cert = OpenSSL::X509::Certificate.new(File.read(cert_file))
+      https.key = OpenSSL::PKey::RSA.new(File.read(key_file))
+      https.verify_mode = OpenSSL::SSL::VERIFY_NONE
+      request = Net::HTTP::Post.new(uri.path)
+      data = {
+          :appId => app_id,
+          :secret => secret
+      }
+      internal_func.printer_texter("get_token: start. Step3, data: #{data.to_s}", "debug")
+      request.content_type = 'application/x-www-form-urlencoded'
+      request.body = URI.encode_www_form(data)
+      res = https.request(request)
+      out_resp = {:code => res.code, :message => res.message, :body => JSON.parse(res.body.to_s)}
+    rescue
+      out_resp = {:code => 500, :message => "failed get token"}
+    end
+    jjj = {:procedure => "get_token", :answ => out_resp}
+    internal_func.printer_texter(jjj, "debug")
+    out_resp
+  end
+
+
+  def token_logout(token)
+
+    internal_func.printer_texter("token_logout Step1 token: #{token}", "debug")
+    out_resp = {}
+    begin
+      path = "/iocm/app/sec/v1.1.0/logout"
+      url_string = "https://" + platformip + ":" + platformport + path
+      internal_func.printer_texter("token_logout Step2 url_string: #{url_string}", "debug")
+      uri = URI.parse url_string
+      https = Net::HTTP.new(uri.host, uri.port)
+      https.use_ssl = true
+      https.cert = OpenSSL::X509::Certificate.new(File.read(cert_file))
+      https.key = OpenSSL::PKey::RSA.new(File.read(key_file))
+      https.verify_mode = OpenSSL::SSL::VERIFY_NONE
+      request = Net::HTTP::Post.new(uri.path)
+      data = {
+          :accessToken => token
+      }
+      internal_func.printer_texter("token_logout Step3 data: #{data.to_s}", "debug")
+      request.content_type = 'application/json'
+      request.body = URI.encode_www_form(data)
+      res = https.request(request)
+      out_resp = {:code => res.code, :message => res.message, :body => JSON.parse(res.body.to_s)}
+    rescue
+      out_resp = {:code => 500, :message => "failed logout token"}
+    end
+    jjj = {:procedure => "token_logout", :answ => out_resp}
+    internal_func.printer_texter(jjj, "debug")
+    out_resp
   end
 
   #Registering a Directly Connected Device (Verification Code Mode) (V2)
@@ -89,10 +133,11 @@ class HuaIot
     {:code => res.code, :message => res.message, :body => JSON.parse(res.body.to_s)}
   end
 
-
-  def dev_delete(app_id, secret, node_id)
+  #2.2.4 Registering a Directly Connected Device (Password Mode) (V2)
+  def dev_register_passw_code_mode2(app_id, secret, node_id, name_p, description_p, device_type, profile, manufacturer_id, manufacturer_name, model)
+    out_resp = {}
     token = get_token(app_id, secret)[:body]["accessToken"]
-    path = "/iocm/app/dm/v1.1.0/devices/" + node_id + "?app_Id=" + app_id + "&cascade=true"
+    path = "/iocm/app/reg/v2.0.0/deviceCredentials?appId=" + app_id
     url_string = "https://" + platformip + ":" + platformport + path
     uri = URI.parse url_string
     https = Net::HTTP.new(uri.host, uri.port)
@@ -100,18 +145,93 @@ class HuaIot
     https.cert = OpenSSL::X509::Certificate.new(File.read(cert_file))
     https.key = OpenSSL::PKey::RSA.new(File.read(key_file))
     https.verify_mode = OpenSSL::SSL::VERIFY_NONE
-    request = Net::HTTP::Delete.new(uri.path)
+    request = Net::HTTP::Post.new(uri.path)
     request.content_type = 'application/json'
     request['Authorization'] = 'Bearer ' + token
     request['app_key'] = app_id
+    data_out = {deviceInfo: {nodeId: node_id,
+                             name: name_p,
+                             description: description_p,
+                             deviceType: device_type,
+                             manufacturerId: manufacturer_id,
+                             manufacturerName: manufacturer_name,
+                             model: model,
+                             isSecurity: "FALSE",
+                             supportedSecurity: "FALSE"}}.to_json
+    internal_func.printer_texter({:procedure => "dev_register_passw_code_mode2", :data => {:body => data_out, :url => url_string}}, "debug")
+    request.body = data_out
     res = https.request(request)
-    {:code => res.code, :message => res.message, :body => JSON.parse(res.body.to_s)}
+    p res.body.to_s
+    out_resp = {:code => res.code, :message => res.message, :body => JSON.parse(res.body.to_s)}
+    p out_resp
+    out_resp
+  end
+
+
+  #2.2.4 Registering a Directly Connected Device (Password Mode) (V2)
+  def dev_reg_passw_code_mode2_2(app_id, secret, attr_list)
+    out_resp = {}
+    token = get_token(app_id, secret)[:body]["accessToken"]
+    path = "/iocm/app/reg/v2.0.0/deviceCredentials?appId=" + app_id
+    url_string = "https://" + platformip + ":" + platformport + path
+    uri = URI.parse url_string
+    https = Net::HTTP.new(uri.host, uri.port)
+    https.use_ssl = true
+    https.cert = OpenSSL::X509::Certificate.new(File.read(cert_file))
+    https.key = OpenSSL::PKey::RSA.new(File.read(key_file))
+    https.verify_mode = OpenSSL::SSL::VERIFY_NONE
+    request = Net::HTTP::Post.new(uri.path)
+    request.content_type = 'application/json'
+    request['Authorization'] = 'Bearer ' + token
+    request['app_key'] = app_id
+    data_out = {deviceInfo: attr_list}.to_json
+    internal_func.printer_texter({:procedure => "dev_register_passw_code_mode2", :data => {:body => data_out, :url => url_string}}, "debug")
+    request.body = data_out
+    res = https.request(request)
+    p res.body.to_s
+    out_resp = {:code => res.code, :message => res.message, :body => JSON.parse(res.body.to_s)}
+    p out_resp
+    out_resp
+  end
+
+
+  #2.2.12 Deleting a Directly Connected Device
+  def dev_delete(app_id, dev_id, token)
+    out_resp = {}
+
+    begin
+      path = "/iocm/app/dm/v1.1.0/devices/" + dev_id + "?app_Id=" + app_id + "&cascade=true"
+      url_string = "https://" + platformip + ":" + platformport + path
+      uri = URI.parse url_string
+      https = Net::HTTP.new(uri.host, uri.port)
+      https.use_ssl = true
+      https.cert = OpenSSL::X509::Certificate.new(File.read(cert_file))
+      https.key = OpenSSL::PKey::RSA.new(File.read(key_file))
+      https.verify_mode = OpenSSL::SSL::VERIFY_NONE
+      request = Net::HTTP::Delete.new(uri.path)
+      request.content_type = 'application/json'
+      request['Authorization'] = 'Bearer ' + token
+      request['app_key'] = app_id
+      res = https.request(request)
+      p res.code
+      p res.body
+      if res.body != nil
+        out_resp = {:code => res.code, :message => res.message, :body => {:answ => JSON.parse(res.body.to_s)}}
+      else
+        out_resp = {:code => res.code, :message => res.message, :body => {:answ => "no data"}}
+      end
+    rescue
+      out_resp = {:code => 500, :message => "dev_delete: Unknown IOT error"}
+    end
+    p out_resp
+    out_resp
   end
 
 
   #2.2.44 Querying the Device ID
   def querying_device_id(app_id, secret, node_id)
     token = get_token(app_id, secret)[:body]["accessToken"]
+    p token
     path = "/iocm/app/dm/v1.1.0/queryDeviceIdByNodeId?nodeId=" + node_id
     p path
     p path
@@ -127,9 +247,9 @@ class HuaIot
     request.content_type = 'application/json'
     request['Authorization'] = 'Bearer ' + token
     request['app_key'] = app_id
-    p request.body
     res = https.request(request)
     p res.body.to_s
+    p res.code
     {:code => res.code, :message => res.message, :body => JSON.parse(res.body.to_s)}
   end
 
@@ -211,6 +331,165 @@ class HuaIot
     res = https.request(request)
     {:code => res.code, :message => res.message, :body => JSON.parse(res.body.to_s)}
   end
+
+
+  #2.9.6 Querying Directly Connected Devices and Their Mounted Devices in Batches
+  def quer_dev_direct_conn_batches(app_id, dev_list, token)
+
+    path = "/iocm/app/dm/v1.1.0/queryDevicesByIds"
+    url_string = "https://" + platformip + ":" + platformport + path
+    p url_string
+    uri = URI.parse url_string
+    https = Net::HTTP.new(uri.host, uri.port)
+    https.use_ssl = true
+    https.cert = OpenSSL::X509::Certificate.new(File.read(cert_file))
+    https.key = OpenSSL::PKey::RSA.new(File.read(key_file))
+    https.verify_mode = OpenSSL::SSL::VERIFY_NONE
+    request = Net::HTTP::Post.new(uri.path)
+    request.content_type = 'application/json'
+    request['Authorization'] = 'Bearer ' + token
+    request['app_key'] = app_id
+    request.body = {deviceIds: dev_list}.to_json
+    res = https.request(request)
+    {:code => res.code, :message => res.message, :body => JSON.parse(res.body.to_s)}
+
+  end
+
+
+  #2.2.11 Modifying Device Information (V2)
+  def dev_modify_location_v2(app_id, dev_id, token, address)
+    out_resp = {}
+
+    begin
+      path = "/iocm/app/dm/v1.4.0/devices/" + dev_id + "?app_Id=" + app_id
+      url_string = "https://" + platformip + ":" + platformport + path
+      internal_func.printer_texter({:url_string=>url_string, :procedure=>"dev_modify_location_v2"}, "debug")
+      uri = URI.parse url_string
+      https = Net::HTTP.new(uri.host, uri.port)
+      https.use_ssl = true
+      https.cert = OpenSSL::X509::Certificate.new(File.read(cert_file))
+      https.key = OpenSSL::PKey::RSA.new(File.read(key_file))
+      https.verify_mode = OpenSSL::SSL::VERIFY_NONE
+      request = Net::HTTP::Put.new(uri.path)
+      request.content_type = 'application/json'
+      request['Authorization'] = 'Bearer ' + token
+      request['app_key'] = app_id
+      request.body = {location: address}.to_json
+      res = https.request(request)
+      p res.code
+      p res.body
+      if res.body != nil
+        out_resp = {:code => res.code, :message => res.message, :body => {:answ => JSON.parse(res.body.to_s)}}
+      else
+        out_resp = {:code => res.code, :message => res.message, :body => {:answ => "no data"}}
+      end
+    rescue
+      out_resp = {:code => 500, :message => "dev_modify_location_v2: Unknown IOT error"}
+    end
+    p out_resp
+    out_resp
+  end
+
+
+
+  ##2.10.7 Adding Members to a Device Group
+
+
+  ##############################################################3
+
+
+  ########final procedures###############
+
+  def modify_location_iot(app_id, secret, dev_id, address)
+
+    out_resp = {}
+    begin
+      token = self.get_token(app_id, secret)
+      if token[:code] != 500 && token[:body]["accessToken"]!=nil
+        out_resp = self.dev_modify_location_v2(app_id, dev_id, token[:body]["accessToken"], address)
+        if out_resp[:code].to_i == 200 || out_resp[:code].to_i == 204
+          ###logout#
+          begin
+            self.token_logout(token[:body]["accessToken"])
+          rescue
+            nil
+          end
+          ##########
+        end
+      else
+        out_resp = {:code => 500, :message => "modify_location_iot: Invalid IOT platform token"}
+      end
+    rescue
+      out_resp = {:code => 500, :message => "modify_location_iot: Unknown error"}
+    end
+    jjj = {:procedure => "modify_location_iot", :answ => out_resp}
+    internal_func.printer_texter(jjj, "debug")
+    out_resp
+  end
+
+  def add_new_device_on_huawei(app_id, secret, node_id, name_p, description_p, device_type, profile, manufacturer_id, manufacturer_name, model)
+    self.dev_register_passw_code_mode2(app_id, secret, node_id, name_p, description_p, device_type, profile, manufacturer_id, manufacturer_name, model)
+  end
+
+  def add_new_device_on_huawei2(app_id, secret, attr_list)
+    self.dev_reg_passw_code_mode2_2(app_id, secret, attr_list)
+  end
+
+
+  def remove_one_device_from_iot(app_id, secret, dev_id)
+    out_resp = {}
+    begin
+      token = self.get_token(app_id, secret)
+      if token[:code] != 500 && token[:body]["accessToken"]!=nil
+        out_resp = self.dev_delete(app_id, dev_id, token[:body]["accessToken"])
+        if out_resp[:code].to_i == 200 || out_resp[:code].to_i == 204
+          ###logout#
+          begin
+            self.token_logout(token[:body]["accessToken"])
+          rescue
+            nil
+          end
+          ##########
+        end
+      else
+        out_resp = {:code => 500, :message => "remove_one_device_from_iot: Invalid IOT platform token"}
+      end
+    rescue
+      out_resp = {:code => 500, :message => "remove_one_device_from_iot: Unknown error"}
+    end
+    jjj = {:procedure => "remove_one_device_from_iot", :answ => out_resp}
+    internal_func.printer_texter(jjj, "debug")
+    out_resp
+  end
+
+  def quer_dev_query_list(app_id, secret, dev_list)
+    out_resp = {}
+    begin
+      token = self.get_token(app_id, secret)
+      if token[:code] != 500 && token[:body]["accessToken"]!=nil
+        out_resp = self.quer_dev_direct_conn_batches(app_id, dev_list, token[:body]["accessToken"])
+        if out_resp[:code].to_i == 200 || out_resp[:code].to_i == 204
+          ###logout#
+          begin
+            self.token_logout(token[:body]["accessToken"])
+          rescue
+            nil
+          end
+          ##########
+        end
+      else
+        out_resp = {:code => 500, :message => "quer_dev_query_list: Invalid IOT platform token"}
+      end
+    rescue
+      out_resp = {:code => 500, :message => "quer_dev_query_list: Unknown error"}
+    end
+    jjj = {:procedure => "quer_dev_query_list", :answ => out_resp}
+    internal_func.printer_texter(jjj, "debug")
+    out_resp
+  end
+
+
+  #######################################
 
   def test()
 
